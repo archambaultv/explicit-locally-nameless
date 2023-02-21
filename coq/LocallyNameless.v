@@ -188,12 +188,6 @@ Proof.
 Qed.
 #[local] Hint Resolve pss_refl : elnHints.
 
-Ltac autoSpecialize :=
-  match goal with
-  | [H : forall y, ?foo ?x y -> ?p, 
-     H2: ?foo ?x ?z |- _ ] => specialize (H z H2)
-  end.
-
 Lemma pss_shift : forall t t' n k,
   pss t t' ->
   pss (shift t n k) (shift t' n k).

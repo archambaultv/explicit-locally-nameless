@@ -13,6 +13,13 @@ Ltac simplHyp :=
   | [ H : ?x <= 0 |- _] => assert (x = 0) by lia; subst; clear H
   end.
 
+Ltac autoSpecialize :=
+  match goal with
+  | [H : forall y, ?foo ?x y -> ?p, 
+     H2: ?foo ?x ?z |- _ ] => pose proof (H z H2)
+  | [H : forall x y, ?foo x y -> ?p, 
+     H2: ?foo ?x ?y |- _ ] => pose proof (H x y H2)
+  end.
 
 Ltac autodestruct :=
   match goal with

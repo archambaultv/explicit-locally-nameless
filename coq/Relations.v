@@ -1,11 +1,21 @@
 From Coq Require Import Relations.
+From Eln Require Import Tactics.
 
 Section Definitions.
 
 Context {A : Type}.
 
+(* From Wadler https://plfa.github.io/Confluence/, who I think got it from
+   Takahashi’s complete development (1995).*)
+Definition triangle (R : relation A) (f : A -> A) : Prop :=
+  forall x y, R x y -> R x (f x) /\ R y (f x).
+
 Definition diamond (R : relation A) : Prop :=
   forall x y1 y2, R x y1 -> R x y2 -> exists z,  R y1 z /\ R y2 z.
+
+Definition local_triangle (R : relation A) (f : A -> A) : Prop :=
+  forall x y, R x y -> 
+  clos_refl_trans A R x (f x) /\ clos_refl_trans A R y (f x).
 
 Definition local_confluence (R : relation A) : Prop :=
   forall x y1 y2, 
@@ -19,13 +29,50 @@ Definition confluence (R : relation A) : Prop :=
     clos_refl_trans A R x y2 -> 
     exists z, clos_refl_trans A R y1 z /\ clos_refl_trans A R y2 z.
 
+Definition normal_form (R : relation A) (x : A): Prop :=
+    forall y, ~ R x y.
+
+Inductive weakly_normalize (R : relation A) : A -> Prop :=
+    | wn_normal_from : forall x, normal_form R x -> weakly_normalize R x
+    | wn_intro : forall x, (exists y, R x y -> weakly_normalize R y) -> weakly_normalize R x.
+
+Inductive strongly_normalize (R : relation A) : A -> Prop :=
+    | sn_normal_from : forall x, normal_form R x -> strongly_normalize R x
+    | sn_intro : forall x y, R x y -> strongly_normalize R y -> strongly_normalize R x.
+
+Definition weakly_normalizing (R : relation A) : Prop :=
+    forall x, weakly_normalize R x.
+
+Definition strongly_normalizing (R : relation A) : Prop :=
+    forall x, strongly_normalize R x.
+
 End Definitions.
 
 Section Properties.
   Context {A : Type}.
   Variable R : relation A.
 
-  Lemma diamond_confuence_step : diamond R ->
+  Lemma triangle_diamond : forall f, 
+    triangle R f -> diamond R.
+  Proof.
+    intros f tri x y1 y2 x_y1 x_y2;
+    exists (f x); unfold triangle in tri;
+    pose proof (tri x y1 x_y1);
+    pose proof (tri x y2 x_y2);
+    crush.
+  Qed.
+
+  Lemma local_triangle_local_confluent : forall f,
+    local_triangle R f -> local_confluence R.
+  Proof.
+    intros f tri x y1 y2 x_y1 x_y2;
+    exists (f x); unfold triangle in tri;
+    pose proof (tri x y1 x_y1);
+    pose proof (tri x y2 x_y2);
+    crush.
+  Qed.   
+
+  Lemma diamond_strip : diamond R ->
     forall x y1 y2, 
     R x y1 -> 
     clos_refl_trans A R x y2 -> 
@@ -45,7 +92,7 @@ Section Properties.
   Proof.
     intros D x y1 y2 y1H; generalize dependent y2; 
     induction y1H as [x y1 x_y1 | |x y1 z1 x_y1 x_y1_H y1_z1 y1_z1_H]; intros y2 y2H.
-    - destruct (diamond_confuence_step D x y1 y2 x_y1 y2H) as [z [zH1 zH2]].
+    - destruct (diamond_strip D x y1 y2 x_y1 y2H) as [z [zH1 zH2]].
       eauto with sets.
     - eauto using rt_refl.
     - destruct (x_y1_H y2 y2H) as [z2 [Hyz2 Hy2z2]];
@@ -64,5 +111,9 @@ Section Properties.
     destruct (confluentR x y1 y2 (H2 x y1 x_y1) (H2 x y2 x_y2)) as [z [H1z H2z]].
     eauto.
   Qed.
+
+  Theorem diamond_terminating_confluent :
+    diamond R -> strongly_normalizing R -> confluence R.
+  Admitted.
 
 End Properties.
