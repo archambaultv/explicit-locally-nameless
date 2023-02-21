@@ -1,0 +1,26 @@
+% !TEX root = main.tex
+
+\documentclass[letterpaper]{article}
+
+% By default wider margin than the standard latex article class
+\usepackage{geometry}
+
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+
+\usepackage{amsmath, amssymb}
+
+\usepackage{libertine}
+
+\title{Explicit Locally Nameless}
+
+% Authors
+\usepackage{authblk}
+% https://tex.stackexchange.com/questions/100017/missing-space-before-and-in-author-list-with-two-thanks
+\let\origthanks\thanks
+\renewcommand\thanks[1]{\begingroup\let\rlap\relax\origthanks{#1}\endgroup}
+\author{Vincent Archambault\thanks{vincent.archambault-bouffard@umontreal.ca}}
+\author{Stefan Monnier\thanks{monnier@iro.umontreal.ca}}
+\affil{DIRO - Université de Montréal}
+
+\begin{document}
