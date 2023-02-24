@@ -60,10 +60,6 @@ Fixpoint apply_n (n : nat) (f : A -> A) : A -> A :=
 Definition triangle_op (R : relation A) (f : A -> A) : Prop :=
     forall x y, R x y -> R y (f x).
 
-Definition normalizer (R : relation A) (f : A -> A) : Prop :=
-    (forall x, clos_refl_trans_1n A R x (f x)) /\
-    (forall x y, terminal R x y -> exists n, apply_n n f x = y).
-
 End Definitions.
 
 Theorem clos_rt1n_trans : forall (A : Type) (R : relation A) x y z,
@@ -112,6 +108,47 @@ Section Properties.
     induction x_y; crush; autoSpecialize; crush.
   Qed.
   Hint Resolve monotonicity_rt : elnHints.
+
+  Theorem preserve_rt : forall (R : relation A) (f : A -> A) x y,
+    (forall x y, R x y -> R (f x) (f y)) ->
+    clos_refl_trans_1n A R x y -> clos_refl_trans_1n A R (f x) (f y).
+  Proof.
+    intros R f x y H x_y;
+    induction x_y; crush.
+  Qed.
+
+  Theorem preserve_rt_left : forall (R : relation A) (f : A -> A -> A) x1 x2 z,
+    (forall x1 x2 z, R x1 x2 -> R (f x1 z) (f x2 z)) ->
+    clos_refl_trans_1n A R x1 x2 -> 
+    clos_refl_trans_1n A R (f x1 z) (f x2 z).
+  Proof.
+    intros R f x1 x2 z HLeft x1_x2;
+    induction x1_x2; crush.
+  Qed.
+  Hint Resolve preserve_rt_left : elnHints.
+
+  Theorem preserve_rt_right : forall (R : relation A) (f : A -> A -> A) x z1 z2,
+    (forall x z1 z2, R z1 z2 -> R (f x z1) (f x z2)) ->
+    clos_refl_trans_1n A R z1 z2 -> 
+    clos_refl_trans_1n A R (f x z1) (f x z2).
+  Proof.
+    intros R f x z1 z2 HRight z1_z2;
+    induction z1_z2; crush.
+  Qed.
+  Hint Resolve preserve_rt_right : elnHints.
+
+  Theorem preserve_rt_para : forall (R : relation A) (f : A -> A -> A) x1 x2 z1 z2,
+    (forall x1 x2 z, R x1 x2 -> R (f x1 z) (f x2 z)) ->
+    (forall x z1 z2, R z1 z2 -> R (f x z1) (f x z2)) ->
+    clos_refl_trans_1n A R x1 x2 -> 
+    clos_refl_trans_1n A R z1 z2 -> 
+    clos_refl_trans_1n A R (f x1 z1) (f x2 z2).
+  Proof.
+    intros R f x1 x2 z1 z2 HLeft HRight x1_x2 z1_z2;
+    pose proof (preserve_rt_left R f x1 x2 z1 HLeft  x1_x2) as H1;
+    pose proof (preserve_rt_right R f x2 z1 z2 HRight  z1_z2) as H2.
+    crush.
+  Qed.
 
   (* Facts about confluence and friend *)
 
@@ -213,9 +250,9 @@ Section Properties.
   Qed.
   Hint Resolve nf_terminal : elnHints.
 
-  Theorem nf_rt_equal : forall (R : relation A) x,
+  Theorem nf_rt_equal : forall (R : relation A) x y,
     normal R x -> 
-    forall y, clos_refl_trans_1n A R x y -> x = y.
+    clos_refl_trans_1n A R x y -> x = y.
   Proof.
     unfold normal; unfold reducible; 
     intros R x H y x_y; induction x_y; crush;
@@ -223,9 +260,9 @@ Section Properties.
   Qed.
   Hint Resolve nf_rt_equal : elnHints.
 
-  Theorem nf_terminal_equal : forall (R : relation A) x,
+  Theorem nf_terminal_equal : forall (R : relation A) x y,
     normal R x -> 
-    forall y, terminal R x y -> x = y.
+    terminal R x y -> x = y.
   Proof.
     unfold terminal; ecrush.
   Qed. 
@@ -236,7 +273,6 @@ Section Properties.
   Proof.
     unfold terminal; ecrush.
   Qed.
-  Hint Resolve terminal_step : elnHints.
 
   Lemma normal_step_false : forall (R : relation A) x y,
     normal R x -> R x y -> False.
@@ -253,8 +289,8 @@ Section Properties.
     destruct Ty as [x_y nfy].
     destruct Tz as [x_z nfz].
     destruct (C x y z x_y x_z) as [u [y_u z_u]].
-    rewrite (nf_rt_equal R y nfy u y_u).
-    rewrite (nf_rt_equal R z nfz u z_u).
+    rewrite (nf_rt_equal R y u nfy y_u).
+    rewrite (nf_rt_equal R z u nfz z_u).
     auto.
   Qed.
 
@@ -299,14 +335,35 @@ Section Properties.
     ecrush.
   Qed.
 
-  (* Theorem triangle_confluent : forall (R1 R2 : relation A) (f : A -> A),
-    inclusion A R1 R2 ->
-    inclusion A R2 (clos_refl_trans_1n A R1) ->
-    reflexive R2 ->
-    triangle_op R2 f ->
-    normalizer R1 f.
-  Proof.
-    
-  Qed. *)
-
 End Properties.
+
+#[global]
+Hint Resolve 
+  idempotence_rt
+  monotonicity_rt
+  preserve_rt
+  preserve_rt_left
+  preserve_rt_right
+  preserve_rt_para
+  diamond_semi_confluent
+  semi_confluent_confluent
+  nf_terminal
+  normal_step_false
+  confluent_unique_nf
+  terminating_confluence 
+  nf_terminal_equal
+  nf_rt_equal
+  triangle_confluent
+  sandwich_diamond
+  sandwich_confluence 
+  sandwich_same_rt : elnHints.
+
+#[global]
+Hint Unfold joinable reducible normal terminal WN : elnHints.
+
+#[global]
+Hint Extern 1 (terminal ?R ?x ?z) =>
+match goal with
+  | H: terminal ?R ?y z |- _ => apply (terminal_step R x y z)
+  | H: R x ?y |- _ => apply (terminal_step R x y z H)
+  end : elnHints.

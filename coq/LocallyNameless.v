@@ -153,40 +153,7 @@ Inductive ss : tm -> tm -> Prop :=
 
 #[export] Hint Constructors ss : elnHints.
 
-Definition ss_rt := clos_refl_trans tm ss.
-#[export] Hint Unfold ss_rt : elnHints.
-
-(** We want to prove the confluence of the small steps relation. We will first
-        show that ss and pss defined below have the same reflexive transitive
-        closure. Then prove that pss is confluent, thus proving ss confluent.*)
-
-(** Parallel small steps *)
-Inductive pss : tm -> tm -> Prop :=
-| pss_c : forall i, pss (C i) (C i)
-| pss_v : forall i, pss (V i) (V i)
-| pss_i : forall i, pss (I i) (I i)
-| pss_para : forall t1 t1' t2 t2', 
-    pss t1 t1' -> 
-    pss t2 t2' -> 
-    pss (App t1 t2) (App t1' t2')
-| pss_abs : forall t t', 
-    pss t t' -> 
-    pss (Abs t) (Abs t') 
-| pss_beta : forall t t' u u', 
-    pss t t' -> 
-    pss u u' -> 
-  pss (App (Abs t) u) (subst t' u' 0).
-
-#[local] Hint Constructors pss : elnHints.
-
-Definition pss_rt := clos_refl_trans tm ss.
-#[local] Hint Unfold pss_rt : elnHints.
-
-Lemma pss_refl : forall t1, pss t1 t1.
-Proof.
-  induction t1; crush.
-Qed.
-#[local] Hint Resolve pss_refl : elnHints.
+Notation "ss*" := (clos_refl_trans_1n tm ss).
 
 Lemma pss_shift : forall t t' n k,
   pss t t' ->
@@ -227,12 +194,50 @@ Proof.
 Qed.
 #[local] Hint Resolve pss_subst : elnHints.
 
+(** We want to prove the confluence of the small steps relation. We will first
+        show that ss and pss defined below have the same reflexive transitive
+        closure. Then prove that pss is confluent, thus proving ss confluent.*)
+
+(** Parallel small steps *)
+Inductive pss : tm -> tm -> Prop :=
+| pss_c : forall i, pss (C i) (C i)
+| pss_v : forall i, pss (V i) (V i)
+| pss_i : forall i, pss (I i) (I i)
+| pss_para : forall t1 t1' t2 t2', 
+    pss t1 t1' -> 
+    pss t2 t2' -> 
+    pss (App t1 t2) (App t1' t2')
+| pss_abs : forall t t', 
+    pss t t' -> 
+    pss (Abs t) (Abs t') 
+| pss_beta : forall t t' u u', 
+    pss t t' -> 
+    pss u u' -> 
+  pss (App (Abs t) u) (subst t' u' 0).
+
+#[local] Hint Constructors pss : elnHints.
+
+Notation "pss*" := (clos_refl_trans_1n tm pss).
+
+Lemma pss_refl : reflexive tm pss.
+Proof.
+  intro t1;
+  induction t1; crush.
+Qed.
+#[local] Hint Resolve pss_refl : elnHints.
+
+
+
 Lemma inclusion_ss_pss : inclusion tm ss pss.
 Proof.
-  Admitted.
+  intros x y x_y; induction x_y; crush.
+Qed.
+#[local] Hint Resolve inclusion_ss_pss : elnHints.
 
-Lemma inclusion_pss_ss_rt : inclusion tm pss ss_rt.
+Lemma inclusion_pss_ss_rt : inclusion tm pss ss*.
 Proof.
+  intros x y x_y; induction x_y; crush.
+  - 
   Admitted.
 
 Lemma diamond_pss : diamond pss.
