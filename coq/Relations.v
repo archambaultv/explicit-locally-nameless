@@ -62,6 +62,9 @@ Definition triangle_op (R : relation A) (f : A -> A) : Prop :=
 
 End Definitions.
 
+#[global] Hint Resolve clos_rt1n_step : elnHints.
+#[global] Hint Resolve rt1n_refl : elnHints.
+
 Theorem clos_rt1n_trans : forall (A : Type) (R : relation A) x y z,
   clos_refl_trans_1n A R x y ->
   clos_refl_trans_1n A R y z ->
@@ -74,14 +77,22 @@ Proof.
   eauto using rt_trans.
 Qed.
 
-#[global] Hint Resolve clos_rt1n_step : elnHints.
-#[global] Hint Resolve rt1n_refl : elnHints.
+Theorem clos_rt1n_right : forall (A : Type) (R : relation A) x y z,
+  clos_refl_trans_1n A R x y ->
+  R y z ->
+  clos_refl_trans_1n A R x z.
+Proof.
+  intros A R x y z x_y y_z;
+  apply (clos_rt1n_trans A R x y z); auto using clos_rt1n_step.
+Qed.
+
 #[global] Hint Extern 1 (clos_refl_trans_1n ?A ?R ?x ?z) =>
   match goal with
   | H1: clos_refl_trans_1n A R x ?y,
     H2: clos_refl_trans_1n A R ?y z |- _ => exact (clos_rt1n_trans A R x y z H1 H2)
   | H: R x ?y |- _ => apply (rt1n_trans A R x y z H)
   | H: clos_refl_trans_1n A R ?y z |- _ => apply (rt1n_trans A R x y z)
+  | H: R ?y z |- _ => apply (clos_rt1n_right A R x y z)
   end : elnHints.
 
 Section Properties.
@@ -122,8 +133,9 @@ Section Properties.
     clos_refl_trans_1n A R x1 x2 -> 
     clos_refl_trans_1n A R (f x1 z) (f x2 z).
   Proof.
-    intros R f x1 x2 z HLeft x1_x2;
-    induction x1_x2; crush.
+    intros R f x1 x2 z HLeft x1_x2.
+    exact (preserve_rt R (fun x => f x z) x1 x2 
+      (fun x1 x2 x1_x2 => HLeft x1 x2 z x1_x2) x1_x2).
   Qed.
   Hint Resolve preserve_rt_left : elnHints.
 
@@ -133,7 +145,8 @@ Section Properties.
     clos_refl_trans_1n A R (f x z1) (f x z2).
   Proof.
     intros R f x z1 z2 HRight z1_z2;
-    induction z1_z2; crush.
+    exact (preserve_rt R (fun z => f x z) z1 z2 
+      (fun z1 z2 z1_z2 => HRight x z1 z2 z1_z2) z1_z2).
   Qed.
   Hint Resolve preserve_rt_right : elnHints.
 
@@ -354,6 +367,7 @@ Hint Resolve
   nf_terminal_equal
   nf_rt_equal
   triangle_confluent
+  triangle_diamond
   sandwich_diamond
   sandwich_confluence 
   sandwich_same_rt : elnHints.

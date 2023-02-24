@@ -155,44 +155,39 @@ Inductive ss : tm -> tm -> Prop :=
 
 Notation "ss*" := (clos_refl_trans_1n tm ss).
 
-Lemma pss_shift : forall t t' n k,
-  pss t t' ->
-  pss (shift t n k) (shift t' n k).
+Lemma ss_shift : forall t t' n k,
+  ss t t' ->
+  ss (shift t n k) (shift t' n k).
 Proof.
-  intros t t' n k t_t';
-  generalize dependent k; 
-  induction t_t'; crush.
-  - specialize (IHt_t'1 (k + 1)).
-    specialize (IHt_t'2 k).
-    pose proof (pss_beta _ _ _ _ IHt_t'1  IHt_t'2) as H.
-    rewrite (subst_shift_shift t' u' 0 n (k + 1) n k) in H by crush.
-    assert (H2 : k + 1 - 1 = k) by crush.
-    rewrite H2 in H.
-    assert (H3 : n - n = 0) by crush.
-    rewrite H3 in H.
-    rewrite (shift_0 u' k) in H. 
+  intros t t' n k t_t'; 
+  generalize dependent k;
+  induction t_t'; intro k; crush.
+  - pose proof (ss_beta (shift t n (k + 1)) (shift u n k));
+    rewrite (subst_shift_shift t u 0 n (k + 1) n k) in H by crush;
+    assert (H2 : k + 1 - 1 = k) by crush;
+    rewrite H2 in H;
+    assert (H3 : n - n = 0) by crush;
+    rewrite H3 in H;
+    rewrite (shift_0 u k) in H;
     auto.
 Qed.
-#[local] Hint Resolve pss_shift : elnHints.
+#[global] Hint Resolve ss_shift : elnHints.
 
-Lemma pss_subst : forall t t' u u' k,
-  pss t t' ->
-  pss u u' ->
-  pss (subst t u k) (subst t' u' k).
+Lemma ss_subst_left : forall t t' u k,
+  ss t t' ->
+  ss (subst t u k) (subst t' u k).
 Proof.
-  intros t t' u u' k t_t';
+  intros t t' u k t_t';
   generalize dependent k;
   induction t_t'; crush; repeat (autodestruct; crush).
-  - specialize (IHt_t'1 (k + 1) H).
-    specialize (IHt_t'2 k H).
-    pose proof (pss_beta _ _ _ _ IHt_t'1  IHt_t'2) as H2.
+  - pose proof (ss_beta (subst t u (k + 1)) (subst u0 u k)).
     assert (H3 : 0 <= k) by crush.
-    pose proof (subst_swap t' u'0 0 u' k H3) as H4.
+    pose proof (subst_swap t u0 0 u k H3) as H4.
     assert (S k = k + 1) by crush.
     assert (k - 0 = k) by crush.
     crush.
 Qed.
-#[local] Hint Resolve pss_subst : elnHints.
+#[global] Hint Resolve ss_subst_left : elnHints.
 
 (** We want to prove the confluence of the small steps relation. We will first
         show that ss and pss defined below have the same reflexive transitive
@@ -226,8 +221,6 @@ Proof.
 Qed.
 #[local] Hint Resolve pss_refl : elnHints.
 
-
-
 Lemma inclusion_ss_pss : inclusion tm ss pss.
 Proof.
   intros x y x_y; induction x_y; crush.
@@ -237,78 +230,98 @@ Qed.
 Lemma inclusion_pss_ss_rt : inclusion tm pss ss*.
 Proof.
   intros x y x_y; induction x_y; crush.
-  - 
-  Admitted.
+  - assert (H : ss* (App (Abs t) u) (App (Abs t') u')) by crush.
+    pose proof (ss_beta t' u').
+    crush.
+Qed.
+#[local] Hint Resolve inclusion_pss_ss_rt : elnHints.
 
-Lemma diamond_pss : diamond pss.
+Lemma pss_shift : forall t t' n k,
+  pss t t' ->
+  pss (shift t n k) (shift t' n k).
 Proof.
-  (* By induction on x and then we inspect what step is used in both direction.
-     Only the case of App where one side use para and the other use subst is
-     interesting. We need to use pss_para_beta when this happens. *)
-  intros x yl yr x_yl; generalize dependent yr; 
-  induction x_yl as [il | il | il 
-    | lt1 lt1' lt2 lt2' lt1_t1' lt1_t1'_H lt2_t2' lt2_t2'_H 
-    | lt lt' lt_t' lt_t'_H 
-    | lt lt' lu lu' lt_t' lt_t'_H lu_u' lu_u'_H ]; 
-  intros yr x_yr;
-  inversion x_yr as [ir | ir | ir 
-  | rt1 rt1' rt2 rt2' rt1_t1' rt1_t1'_H rt2_t2' rt2_t2'_H 
-  | rt rt' rt_t' rt_t'_H 
-  | rt rt' ru ru' rt_t' rt_t'_H ru_u' ru_u'_H ]; 
-  ecrush.
-  - repeat autoSpecialize; simplHyp; ecrush.
-  - inversion lt1_t1'; subst.
-    destruct (lt2_t2'_H ru' rt_t'_H).
-    assert (H1: pss (Abs rt) (Abs rt')) by crush.
-    destruct (lt1_t1'_H (Abs rt') H1).
-    simplHyp. inversion H2; subst.
-    inversion H3; subst.
-    exists (subst t'0 x 0); crush.
-  - autoSpecialize; simplHyp.
-    exists (Abs x); crush.
-  - inversion rt1_t1'; subst.
-    destruct (lt_t2'_H ru' rt_t'_H).
-    assert (H1: pss (Abs rt) (Abs rt')) by crush.
-    destruct (lt1_t1'_H (Abs rt') H1).
-    simplHyp. inversion H2; subst.
-    inversion H3; subst.
-    exists (subst t'0 x 0); crush.
-  
-  subst; repeat autoSpecialize; simplHyp.
-    specialize
-  
-  repeat autoSpecialize; simplHyp; ecrush.
-    
-  repeat autoSpecialize; simplHyp; ecrush.
-    exists (subst rt' ru' 0); crush.
-  
-  
-  
-  
-  
-  induction x as [ | | | x IHx | x1 IHx1 x2 IHx2 ]; intros y1 y2 x_y1 x_y2;
-  match goal with
-   | [ |- _ ] => solve [inversion x_y1; inversion x_y2; subst; eauto with elnHints]
-   | [x_y1 : pss (Abs x) y1, x_y2 : pss (Abs x) y2 |- _ ] => 
-      inversion x_y1 as [ | | t1 t2 x_t2 | ]; subst; eauto with elnHints;
-      inversion x_y2 as [ | | t3 t4 x_t4 | ]; subst; eauto with elnHints;
-      destruct (IHx t2 t4 x_t2 x_t4) as [z [H1z H2z]];
-      eauto with elnHints
-   | _ => idtac
-   end.
-  - inversion x_y1 as [ | a t1 b t2 x1_t1 x2_t2 | | a b c d ]; subst; eauto with elnHints;
-    inversion x_y2 as [ | a1 t3 b t4 x1_t3 x2_t4 | | e f g h ]; subst; eauto with elnHints.
-    * destruct (IHx1 t1 t3 x1_t1 x1_t3) as [z [H1z H2z]].
-      destruct (IHx2 t2 t4 x2_t2 x2_t4) as [z2 [H1z2 H2z2]].
-      eauto with elnHints.
-    * inversion x1_t1; subst.
-      + pose proof (pss_para_beta e e x2 t2 0 (pss_refl e) x2_t2).
-      eauto with elnHints.
-      + pose proof (pss_para_beta e t' x2 t2 0 H0 x2_t2).
-      eauto with elnHints. 
-    * inversion x1_t3; subst.
-      + pose proof (pss_para_beta a a x2 t4 0 (pss_refl a) x2_t4).
-        eauto with elnHints.
-      + pose proof (pss_para_beta a t' x2 t4 0 H0 x2_t4).
-      eauto with elnHints.
+  intros t t' n k t_t';
+  generalize dependent k; 
+  induction t_t'; crush.
+  - specialize (IHt_t'1 (k + 1)).
+    specialize (IHt_t'2 k).
+    pose proof (pss_beta _ _ _ _ IHt_t'1  IHt_t'2) as H.
+    rewrite (subst_shift_shift t' u' 0 n (k + 1) n k) in H by crush.
+    assert (H2 : k + 1 - 1 = k) by crush.
+    rewrite H2 in H.
+    assert (H3 : n - n = 0) by crush.
+    rewrite H3 in H.
+    rewrite (shift_0 u' k) in H.
+    crush. 
+Qed.
+#[local] Hint Resolve pss_shift : elnHints.
+
+Lemma pss_subst : forall t t' u u' k,
+  pss t t' ->
+  pss u u' ->
+  pss (subst t u k) (subst t' u' k).
+Proof.
+  intros t t' u u' k t_t';
+  generalize dependent k;
+  induction t_t'; crush; repeat (autodestruct; crush).
+  - specialize (IHt_t'1 (k + 1) H).
+    specialize (IHt_t'2 k H).
+    pose proof (pss_beta _ _ _ _ IHt_t'1  IHt_t'2) as H2.
+    assert (H3 : 0 <= k) by crush.
+    pose proof (subst_swap t' u'0 0 u' k H3) as H4.
+    assert (S k = k + 1) by crush.
+    assert (k - 0 = k) by crush.
+    crush.
+Qed.
+#[local] Hint Resolve pss_subst : elnHints.
+
+(* Now we can easily prove ss_subst_right *)
+(* Crush will use the fact that pss is sandwich between
+   ss and ss*. *)
+Lemma ss_subst_right : forall t u u' k,
+  ss u u' ->
+  ss* (subst t u k) (subst t u' k).
+Proof.
+  crush.
+Qed.
+#[global] Hint Resolve ss_subst_right : elnHints.
+
+Lemma ss_subst_para : forall t t' u u' k,
+  ss* t t' ->
+  ss* u u' ->
+  ss* (subst t' u' k) (subst t' u' k).
+Proof.
+  crush.
+Qed.
+#[global] Hint Resolve ss_subst_para : elnHints.
+
+Fixpoint pss_normalizer (x : tm) : tm :=
+  match x with
+  | C i => C i
+  | V i => V i
+  | I i => I i
+  | Abs t => Abs (pss_normalizer t)
+  | App (Abs t) u => subst (pss_normalizer t) (pss_normalizer u) 0
+  | App t1 t2 => App (pss_normalizer t1) (pss_normalizer t2)
+  end.
+
+Lemma Triangle_pss_normalizer : triangle_op pss pss_normalizer.
+Proof.
+  intros x y x_y; induction x_y; crush; autodestruct; crush.
+  - inversion x_y1; subst.
+    inversion IHx_y1; subst.
+    crush.
+Qed.
+#[local] Hint Resolve Triangle_pss_normalizer : elnHints.
+
+Lemma pss_diamond : diamond pss.
+Proof.
+  exact (triangle_diamond pss pss_normalizer Triangle_pss_normalizer).
+Qed.
+#[local] Hint Resolve pss_diamond : elnHints.
+
+Lemma ss_confluent : confluent ss.
+Proof.
+  apply (triangle_confluent ss pss pss_normalizer); crush.
 Qed.  
+#[global] Hint Resolve ss_confluent : elnHints.
