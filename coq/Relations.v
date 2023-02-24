@@ -1,63 +1,44 @@
 From Coq Require Import Relations.
+From Coq Require Import Relations.Relation_Operators.
 From Eln Require Import Tactics.
 
 Section Definitions.
 
 Context {A : Type}.
 
-(* The idea for triangle I got from Wadler https://plfa.github.io/Confluence/,
-   who I think got it from Takahashi’s complete development (1995).*)
+(* Most of this file is inspired by "Confluence and Normalization in Reduction Systems Lecture Notes"
+   by Gert Smolka of Saarland University. December 16, 2015
+   https://www.ps.uni-saarland.de/courses/sem-ws15/ars.pdf *)
 
-Definition triangle (R : relation A) (f : A -> A) : Prop :=
-  forall x, R x (f x) 
-    /\ forall y, R x y -> R y (f x).
-
-Definition local_triangle (R : relation A) (f : A -> A) : Prop :=
-  forall x, clos_refl_trans A R x (f x) 
-    /\ forall y, R x y -> clos_refl_trans A R y (f x).
-
-Definition confluent_triangle (R : relation A) (f : A -> A) : Prop :=
-  forall x, clos_refl_trans A R x (f x)
-   /\ forall y, clos_refl_trans A R x y -> clos_refl_trans A R y (f x).
+Definition joinable (R : relation A) (x y : A) : Prop :=
+  exists z, R x z /\ R y z.
 
 Definition diamond (R : relation A) : Prop :=
-  forall x y1 y2, R x y1 -> R x y2 -> exists z,  R y1 z /\ R y2 z.
+  forall x y z, R x y -> R x z -> joinable R y z.
 
-Definition local_confluence (R : relation A) : Prop :=
-  forall x y1 y2, 
-    R x y1 -> 
-    R x y2 -> 
-    exists z, clos_refl_trans A R y1 z /\ clos_refl_trans A R y2 z.
+Definition confluent (R : relation A) : Prop :=
+  diamond (clos_refl_trans_1n A R).
 
-Definition confluence (R : relation A) : Prop :=
-  forall x y1 y2, 
-    clos_refl_trans A R x y1 -> 
-    clos_refl_trans A R x y2 -> 
-    exists z, clos_refl_trans A R y1 z /\ clos_refl_trans A R y2 z.
+Definition semi_confluent (R : relation A) : Prop :=
+  forall x y z, 
+    R x y -> 
+    clos_refl_trans_1n A R x z -> 
+    joinable (clos_refl_trans_1n A R) y z.
 
-Definition semi_diamond (R : relation A) : Prop :=
-  forall x y1 y2, 
-  R x y1 -> 
-  clos_refl_trans A R x y2 -> 
-  exists z, clos_refl_trans A R y1 z /\ R y2 z.
+Definition locally_confluent (R : relation A) : Prop :=
+  forall x y z, 
+    R x y -> 
+    R x z -> 
+    joinable (clos_refl_trans_1n A R) y z.
 
-Definition semi_confluence (R : relation A) : Prop :=
-  forall x y1 y2, 
-  R x y1 -> 
-  clos_refl_trans A R x y2 -> 
-  exists z, clos_refl_trans A R y1 z /\ clos_refl_trans A R y2 z.
+Definition reducible (R : relation A) (x : A) : Prop :=
+  exists z, R x z.
 
-Definition convergence (R : relation A) (f : A -> A) : Prop :=
-  forall x y, R x y -> clos_refl_trans A R (f y) (f x).
-
-Definition respects_rt (R : relation A) (f : A -> A) : Prop :=
-  forall x y, R x y -> clos_refl_trans A R (f x) (f y).
-
-Definition normal_form (R : relation A) (x : A) : Prop :=
-  forall y, ~ R x y.
+Definition normal (R : relation A) (x : A) : Prop :=
+  ~ (reducible R x).
 
 Definition terminal (R : relation A) (x y : A) : Prop :=
-  normal_form R y /\ clos_refl_trans A R x y.
+  clos_refl_trans_1n A R x y /\ normal R y.
 
   (* Weak normalization *)
 Definition WN (R : relation A) (x : A) : Prop :=
@@ -67,304 +48,265 @@ Definition WN (R : relation A) (x : A) : Prop :=
 Inductive SN (R : relation A) (x : A) : Prop :=
   | sn_intro : (forall y, R x y -> SN R y) -> SN R x.
 
-Print SN_ind.
-
 Definition terminating (R : relation A) : Prop :=
     forall x, SN R x.
 
+Fixpoint apply_n (n : nat) (f : A -> A) : A -> A :=
+  match n with
+    | 0 => fun x => x
+    | S n => fun x => f (apply_n n f x)
+  end. 
+
+Definition triangle_op (R : relation A) (f : A -> A) : Prop :=
+    forall x y, R x y -> R y (f x).
+
+Definition normalizer (R : relation A) (f : A -> A) : Prop :=
+    (forall x, clos_refl_trans_1n A R x (f x)) /\
+    (forall x y, terminal R x y -> exists n, apply_n n f x = y).
+
 End Definitions.
+
+Theorem clos_rt1n_trans : forall (A : Type) (R : relation A) x y z,
+  clos_refl_trans_1n A R x y ->
+  clos_refl_trans_1n A R y z ->
+  clos_refl_trans_1n A R x z.
+Proof.
+  intros A R x y z x_y y_z;
+  apply clos_rt_rt1n;
+  apply clos_rt1n_rt in x_y;
+  apply clos_rt1n_rt in y_z;
+  eauto using rt_trans.
+Qed.
+
+#[global] Hint Resolve clos_rt1n_step : elnHints.
+#[global] Hint Resolve rt1n_refl : elnHints.
+#[global] Hint Extern 1 (clos_refl_trans_1n ?A ?R ?x ?z) =>
+  match goal with
+  | H1: clos_refl_trans_1n A R x ?y,
+    H2: clos_refl_trans_1n A R ?y z |- _ => exact (clos_rt1n_trans A R x y z H1 H2)
+  | H: R x ?y |- _ => apply (rt1n_trans A R x y z H)
+  | H: clos_refl_trans_1n A R ?y z |- _ => apply (rt1n_trans A R x y z)
+  end : elnHints.
 
 Section Properties.
   Context {A : Type}.
-  Variable R : relation A. 
 
-  Lemma triangle_diamond : forall f, 
-    triangle R f -> diamond R.
+  (* Facts about clos_refl_trans_1n *)
+
+  Theorem idempotence_rt : forall (R : relation A),
+    same_relation A (clos_refl_trans_1n A R) 
+      (clos_refl_trans_1n A (clos_refl_trans_1n A R)).
   Proof.
-    intros f tri x y1 y2 x_y1 x_y2;
-    destruct (tri x);
-    autoSpecialize; ecrush.
+    split; intros x y x_y.
+    - crush.
+    - induction x_y; crush.
+  Qed. 
+  Hint Resolve idempotence_rt : elnHints.
+
+  Theorem monotonicity_rt : forall R1 R2, 
+    inclusion A R1 R2 -> 
+    inclusion A (clos_refl_trans_1n A R1) (clos_refl_trans_1n A R2).
+  Proof.
+    unfold inclusion;
+    intros R1 R2 H x y x_y;
+    induction x_y; crush; autoSpecialize; crush.
+  Qed.
+  Hint Resolve monotonicity_rt : elnHints.
+
+  (* Facts about confluence and friend *)
+
+  Theorem confluent_semi_confluent : forall (R : relation A),
+  confluent R -> semi_confluent R.
+  Proof.
+    intros R C x y1 y2 x_y1 x_y2;
+    destruct (C x y1 y2 (clos_rt1n_step _ _ _ _ x_y1) x_y2);
+    ecrush.
   Qed.
 
-  Lemma diamond_semi_diamond : 
+  Theorem semi_confluent_confluent : forall (R : relation A),
+  semi_confluent R -> confluent R.
+  Proof.
+    unfold semi_confluent.
+    intros R D x y1 y2 y1H; generalize dependent y2.
+    induction y1H as [x | x y z x_y y_z H]; 
+    intros y2 x_y2; unfold joinable.
+    - ecrush.
+    - destruct (D x y y2 x_y x_y2) as [u [y_u y2_u]];
+      destruct (H u y_u) as [v [z_v u_v]];
+      ecrush.
+  Qed. 
+  Hint Resolve semi_confluent_confluent : elnHints.
+
+  Lemma diamond_semi_confluent : forall (R : relation A),
     diamond R ->
-    semi_diamond R.
+    semi_confluent R.
   Proof.
-    intros D x y1 y2 x_y1 rt_x_y2; generalize dependent y1;
-     induction rt_x_y2 as [x y2 x_y2| | x y2 z2 x_y2 x_y2_H y2_z2 y2_z2_H]; intros y1 x_y1.
-    - destruct (D x y1 y2 x_y1 x_y2) as [z [y1_z y2_z]];
-      eauto with sets.
-    - eauto with sets.
-    - destruct (x_y2_H y1 x_y1) as [z3 [y1_z3_H y2_z3_H]].
-      destruct (y2_z2_H z3 y2_z3_H) as [z4 [H_z3_z4 H_z2_z4]].
-      eauto using rt_trans with sets.
+    intros R D x y1 y2 x_y1 x_y2; generalize dependent y1;
+    induction x_y2 as [x | x y2 z2 x_y2 y2_z2 H]; 
+    intros y1 x_y1; unfold joinable.
+    - ecrush.
+    - destruct (D x y1 y2 x_y1 x_y2) as [u [y1_u y2_u]].
+      destruct (H u y2_u);
+      ecrush.
   Qed.
+  Hint Resolve diamond_semi_confluent : elnHints.
 
-  Theorem semi_diamond_confluence : semi_diamond R -> confluence R.
+  Lemma sandwich_same_rt : forall R1 R2,
+    inclusion A R1 R2 ->
+    inclusion A R2 (clos_refl_trans_1n A R1) ->
+    same_relation A (clos_refl_trans_1n A R1) (clos_refl_trans_1n A R2).
   Proof.
-    intros D x y1 y2 y1H; generalize dependent y2; 
-    induction y1H as [x y1 x_y1 | |x y1 z1 x_y1 x_y1_H y1_z1 y1_z1_H]; intros y2 y2H.
-    - destruct (D x y1 y2 x_y1 y2H) as [z [zH1 zH2]].
-      eauto with sets.
-    - eauto using rt_refl.
-    - destruct (x_y1_H y2 y2H) as [z2 [Hyz2 Hy2z2]];
-      destruct (y1_z1_H z2 Hyz2) as [z3 [Hyz3 Hy2z3]];
-      eauto using rt_trans. 
-  Qed. 
-  Hint Resolve semi_diamond_confluence : elnHints.
+    intros R1 R2 H1 H2;
+    pose proof (monotonicity_rt R1 R2 H1) as H3;
+    pose proof (monotonicity_rt R2 (clos_refl_trans_1n A R1) H2) as H4;
+    pose proof (idempotence_rt R1) as [_ H5];
+    split; ecrush.
+  Qed.
+  Hint Resolve sandwich_same_rt : elnHints.
 
-  Theorem confluence_semi_confluence :
-    confluence R -> semi_confluence R.
+  Lemma sandwich_confluence : forall R1 R2,
+    inclusion A R1 R2 ->
+    inclusion A R2 (clos_refl_trans_1n A R1) ->
+    confluent R1 <-> confluent R2.
   Proof.
-    intros C x y1 y2 x_y1 x_y2;
-    destruct (C x y1 y2 (rt_step _ _ _ _ x_y1) x_y2);
+    intros R1 R2 R1inR2 R2inR1rt; 
+    destruct (sandwich_same_rt _ _ R1inR2 R2inR1rt) as [H1 H2];
+    split; 
+    intros C x y z x_y x_z; unfold joinable.
+    - assert (x_y_1 : clos_refl_trans_1n A R1 x y) by crush.
+      assert (x_z_1 : clos_refl_trans_1n A R1 x z) by crush.
+      destruct (C x y z x_y_1 x_z_1).
+      ecrush.
+    - assert (x_y_2 : clos_refl_trans_1n A R2 x y) by crush.
+      assert (x_z_2 : clos_refl_trans_1n A R2 x z) by crush.
+      destruct (C x y z x_y_2 x_z_2).
+      ecrush.
+  Qed.
+  Hint Resolve sandwich_confluence : elnHints.
+
+  Lemma sandwich_diamond : forall R1 R2,
+    inclusion A R1 R2 ->
+    inclusion A R2 (clos_refl_trans_1n A R1) ->
+    diamond R2 -> confluent R1.
+  Proof.
+    intros R1 R2 H1 H2 D;
+    assert (H : confluent R2) by crush;
+    pose proof (sandwich_confluence R1 R2 H1 H2) as H3;
+    crush.
+  Qed.
+  Hint Resolve sandwich_diamond : elnHints.
+
+  Theorem confluent_locally_confluent : forall (R : relation A),
+  confluent R -> locally_confluent R.
+  Proof.
+    intros R C x y1 y2 x_y1 x_y2;
+    destruct (C x y1 y2 (clos_rt1n_step _ _ _ _ x_y1) (clos_rt1n_step _ _ _ _ x_y2));
     ecrush.
   Qed.
 
-  Theorem semi_confluence_confluence :
-  semi_confluence R -> confluence R.
-  Proof.
-    intros D x y1 y2 y1H; generalize dependent y2; 
-    induction y1H as [x y1 x_y1 | |x y1 z1 x_y1 x_y1_H y1_z1 y1_z1_H]; intros y2 y2H.
-    - destruct (D x y1 y2 x_y1 y2H) as [z [zH1 zH2]].
-      eauto with sets.
-    - eauto using rt_refl.
-    - destruct (x_y1_H y2 y2H) as [z2 [Hyz2 Hy2z2]];
-      destruct (y1_z1_H z2 Hyz2) as [z3 [Hyz3 Hy2z3]];
-      eauto using rt_trans.
-  Qed. 
+  (* Facts about reducibility, normal forms and friends *)
 
-  Theorem confluence_local_confluence :
-  confluence R -> local_confluence R.
-  Proof.
-    intros C x y1 y2 x_y1 x_y2;
-    destruct (C x y1 y2 (rt_step _ _ _ _ x_y1) (rt_step _ _ _ _ x_y2));
-    ecrush.
-  Qed.
-
-  Theorem triangle_local_triangle :
-    forall f, triangle R f -> local_triangle R f.
-  Proof.
-    intros f T x.
-    destruct (T x);
-    autoSpecialize; ecrush.
-  Qed.
-
-  Theorem local_triangle_local_confluence :
-    forall f, local_triangle R f -> local_confluence R.
-  Proof.
-    intros f T x y1 y2 x_y1 x_y2;
-    destruct (T x);
-    autoSpecialize; ecrush.
-  Qed.
-
-  Theorem confluent_triangle_confluence :
-  forall f, confluent_triangle R f -> confluence R.
-  Proof.
-    intros f T x y1 y2 x_y1 x_y2;
-    destruct (T x);
-    autoSpecialize; ecrush.
-  Qed.
-
-  Theorem confluent_triangle_local_triangle :
-  forall f, confluent_triangle R f -> local_triangle R f.
-  Proof.
-    intros f T x;
-    destruct (T x);
-    autoSpecialize; ecrush.
-  Qed.
-
-  Lemma confluent_triangle_respects_rt :
-  forall f, confluent_triangle R f -> respects_rt R f.
-  Proof.
-    intros f T x y x_y.
-    destruct (T x) as [x_fx Hx].
-    destruct (T y) as [y_fy Hy].
-    autoSpecialize; crush.
-  Qed.
-
-  Lemma convergence_rt :forall f, 
-    convergence R f ->
-      forall x y, clos_refl_trans A R x y -> 
-                  clos_refl_trans A R (f y) (f x).
-  Proof.
-    unfold convergence;
-    intros f Cf x y x_y;
-    induction x_y; crush; eauto using rt_trans.
-  Qed.
-
-    (* This means that if we can prove local_triangle and convergence, 
-     we also know that f respects_rt, so basically the terms reduce to 
-     a cycle. *)
-  Theorem local_triangle_confluent_triangle : forall f, 
-    convergence R f ->
-    local_triangle R f ->
-    confluent_triangle R f.
-  Proof.
-    intros f convergencef T x;
-    destruct (T x) as [x_fx y_fx]; split ; [auto | intros y H];
-    induction H; auto.
-    - pose proof (convergence_rt f convergencef x y H).
-      destruct (T y);
-      intuition (eauto using rt_trans).
-  Qed.
-
-  Theorem nf_terminal : forall x,
-    normal_form R x -> terminal R x x.
+  Theorem nf_terminal : forall (R : relation A) x,
+    normal R x -> terminal R x x.
   Proof.
     unfold terminal; crush.
   Qed.
   Hint Resolve nf_terminal : elnHints.
 
-  Theorem nf_rt_equal : forall x,
-  normal_form R x -> 
-  forall y, clos_refl_trans A R x y -> x = y.
+  Theorem nf_rt_equal : forall (R : relation A) x,
+    normal R x -> 
+    forall y, clos_refl_trans_1n A R x y -> x = y.
   Proof.
-    unfold normal_form; 
-    intros x H y x_y; induction x_y; crush;
-    exfalso; repeat (autoSpecialize; crush).
+    unfold normal; unfold reducible; 
+    intros R x H y x_y; induction x_y; crush;
+    exfalso; eauto.
   Qed.
   Hint Resolve nf_rt_equal : elnHints.
 
-  Theorem nf_terminal_equal : forall x,
-  normal_form R x -> 
-  forall y, terminal R x y -> x = y.
+  Theorem nf_terminal_equal : forall (R : relation A) x,
+    normal R x -> 
+    forall y, terminal R x y -> x = y.
   Proof.
-    unfold terminal; crush.
+    unfold terminal; ecrush.
   Qed. 
   Hint Resolve nf_terminal_equal : elnHints.
 
-  Theorem terminal_step : forall x y z,
+  Theorem terminal_step : forall (R : relation A) x y z,
     R x y -> terminal R y z -> terminal R x z.
   Proof.
-    unfold terminal; crush; eauto using rt_trans with sets.
+    unfold terminal; ecrush.
   Qed.
   Hint Resolve terminal_step : elnHints.
 
-  (* Lemma sn_rt_terminal : forall x y z,
-    strongly_normalize R x -> 
-    clos_refl_trans A R x y ->
-    terminal R x z ->
-    terminal R y z.
+  Lemma normal_step_false : forall (R : relation A) x y,
+    normal R x -> R x y -> False.
   Proof.
-    Admitted.
-  Hint Resolve sn_rt_terminal : elnHints. *)
-
-  Lemma normal_form_step_false : forall x y,
-    normal_form R x -> R x y -> False.
-  Proof.
-    unfold normal_form; intros; ecrush.
+    unfold normal; unfold reducible; intros; ecrush.
   Qed.
-  Hint Resolve normal_form_step_false : elnHints.
+  Hint Resolve normal_step_false : elnHints.
 
-  (* Lemma local_confluence_unique_terminal : forall x y z,
-    local_confluence R -> 
-    strongly_normalizing R ->
-    R x y ->
-    unique (fun z => terminal R y z) z ->
-    unique (fun z => terminal R x z) z.
+  Theorem confluent_unique_nf : forall (R : relation A),
+    confluent R -> 
+    forall x y z, terminal R x y -> terminal R x z -> y = z.
   Proof.
-    intros x y z C SN x_y unique_y_z;
-    destruct unique_y_z as [terminal_y_z H];
-    assert (Hterminal_y_z := terminal_y_z);
-    destruct terminal_y_z as [nf_z y_z];
-    split; [ecrush | intros z2 terminal_x_z2];
-    induction y_z as [y1 y2 | | ].
-    -   
+    intros R C x y z Ty Tz.
+    destruct Ty as [x_y nfy].
+    destruct Tz as [x_z nfz].
+    destruct (C x y z x_y x_z) as [u [y_u z_u]].
+    rewrite (nf_rt_equal R y nfy u y_u).
+    rewrite (nf_rt_equal R z nfz u z_u).
+    auto.
+  Qed.
 
-
-    split; [ecrush | intros z2 terminal_x_z2];
-    destruct terminal_x_z2 as [nf_z2 x_z2];
-
-    
-    induction x_z2 as [x y2 x_y2 | | ].
-    - destruct (C x y y2 x_y x_y2) as [u [Hy Hy2]].
-      pose proof (nf_rt_equal y2 nf_z2 u Hy2) as H1.
-      rewrite H1 in *.
-      destruct (sn_rt_terminal y u z (SN y) Hy Hterminal_y_z).
-      specialize (H u).
-      assert (terminal R y u) by ecrush.
-      crush.
-    - exfalso. ecrush.
-    - specialize (H z0).
-      destruct (sn_rt_terminal z y z0 (SN z)).
-      
-      
-
-
-    Admitted.
-  Hint Resolve local_confluence_unique_terminal : elnHints. *)
-  Print strongly_normalize_ind.
-  Lemma local_confluence_and_strongly_normalizing : 
-    local_confluence R -> 
-    strongly_normalizing R ->
-    forall x, exists! z, 
-      terminal R x z /\ 
-      forall y1 y2, clos_refl_trans A R x y1 -> 
-                    clos_refl_trans A R x y2 -> 
-                    unique (fun u => terminal R y1 u) z ->
-                    unique (fun u => terminal R y2 u) z.
+  Theorem terminating_confluence : forall (R : relation A),
+    terminating R ->
+    locally_confluent R ->
+    confluent R.
   Proof.
-    intros C SN x;
-    induction (SN x) as [| x y x_y SNy HSNy ].
-    - exists x; unfold unique; split.
-      * split.
-       + ecrush.
-       + intros y1 y2 x_y1 x_y2;
-          pose proof (nf_rt_equal x H y1 x_y1) as H2;
-          pose proof (nf_rt_equal x H y2 x_y2) as H3;
-          rewrite H2 in *; rewrite H3 in *; ecrush.
-      * ecrush. 
-    - destruct HSNy as [z [[terminal_y_z H1] H2]].
-      exists z.
-      split; [split | intro x2].
+    intros R SNR C x; induction (SNR x) as [x H1 H2];
+    intros y z x_y x_z; unfold joinable;
+    destruct x_y as [| y y1 x_y y_y1 ].
+    - ecrush.
+    - destruct x_z as [| z z1 x_z z_z1].
       * ecrush.
-      * intros y2 x_y2.
-           induction x_y2.
-           + admit.
-           + split. ecrush. intros u Hu.
-             destruct terminal_y_z.
-             specialize (H1 z H0). 
-           *** intros z2 terminal_y2_z2.
-               specialize (H2 z2). 
-
-
-
-
-      * unfold unique; ecrush.  unfold unique. ecrush split.
-      pose proof (nf_rt_equal x H y1 x_y1) as H1.
-      rewrite <- H1 in *. clear H1.
-      pose proof (nf_rt_equal x H y2 x_y2) as H2.
-      rewrite <- H2 in *. clear H2.
-      unfold unique; crush.
-    - pose proof (C x y )
-    
-    destruct HSNy as [z Hz].
-      destruct Hz as [H1 H0].
-      exists z. split.
-      ecrush.
-      intros x2 H2.
-      destruct H2.
-      induction H2.
-      * admit.
-      * exfalso. ecrush.
-      *     
-      ecrush.
+      * destruct (C x y z x_y x_z) as [u [y_u z_u]].
+        destruct (H2 y x_y y1 u y_y1 y_u) as [y' [y1_y' u_y']]. 
+        destruct (H2 z x_z z1 u z_z1 z_u) as [z' [z1_z' z_z']].
+        assert (H3 : clos_refl_trans_1n A R y z') by crush.
+        assert (H4 : clos_refl_trans_1n A R y y') by crush.
+        destruct (H2 y x_y z' y' H3 H4) as [t [z'_t y'_t]].
+        exists t; crush.
   Qed.
 
-  Theorem same_clos_refl_trans_confluence : forall (R2 : relation A),
-    same_relation A (clos_refl_trans A R) (clos_refl_trans A R2) ->
-    confluence R -> confluence R2.
+  (* Facts triangle operators and normalizer *)
+
+  Theorem triangle_diamond : forall (R : relation A) (f : A -> A),
+    triangle_op R f ->
+    diamond R.
   Proof.
-    intros R2 same confluentR.
-    destruct same as [H1 H2]. unfold inclusion in *. unfold confluence in *.
-    intros x y1 y2 x_y1 x_y2.
-    destruct (confluentR x y1 y2 (H2 x y1 x_y1) (H2 x y2 x_y2)) as [z [H1z H2z]].
-    eauto.
+    unfold triangle_op;
+    intros R f Tf x y z x_y x_z;
+    exists (f x); crush.
+  Qed.
+  Hint Resolve triangle_diamond : elnHints.
+
+  Theorem triangle_confluent : forall (R1 R2 : relation A) (f : A -> A),
+    inclusion A R1 R2 ->
+    inclusion A R2 (clos_refl_trans_1n A R1) ->
+    triangle_op R2 f ->
+    confluent R1.
+  Proof.
+    ecrush.
   Qed.
 
-  Theorem diamond_terminating_confluent :
-    diamond R -> strongly_normalizing R -> confluence R.
-  Admitted.
+  (* Theorem triangle_confluent : forall (R1 R2 : relation A) (f : A -> A),
+    inclusion A R1 R2 ->
+    inclusion A R2 (clos_refl_trans_1n A R1) ->
+    reflexive R2 ->
+    triangle_op R2 f ->
+    normalizer R1 f.
+  Proof.
+    
+  Qed. *)
 
 End Properties.
